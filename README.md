@@ -179,7 +179,7 @@
 
  1. Клонирование репозитория
 
-git clone [https://github.com/<your-username>/<your-repo>](https://github.com/kkaifddkk/telegram-anonymous-feedback-bot).git
+git clone https://github.com/kkaifddkk/telegram-anonymous-feedback-bot.git
 cd <your-repo>
 
 
