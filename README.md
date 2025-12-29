@@ -180,9 +180,9 @@
  1. Клонирование репозитория
 
 git clone https://github.com/kkaifddkk/telegram-anonymous-feedback-bot.git
-cd <your-repo>
+Anonymous messages bot
 
-
+1.1. cd Anonymous messages bot
 
  2. Установка зависимостей
 
