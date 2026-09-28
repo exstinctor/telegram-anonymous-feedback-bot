@@ -1,0 +1,31 @@
+services:
+  bot:
+    build: .
+    container_name: telegram-anonymous-feedback-bot
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      # Именованный volume, а не путь внутри образа — пересборка образа
+      # (docker compose build / up --build) не должна стирать bot_database.db
+      # и premium_users.db.
+      - bot_data:/app/data
+    # Бот сам инициирует исходящие соединения к api.telegram.org (long polling),
+    # входящих портов ему не нужно — поэтому ports: здесь нет.
+
+  # Опциональный сервис — поднимается только с профилем redis:
+  #   docker compose --profile redis up -d
+  # и только если в .env указано REDIS_URL=redis://redis:6379/0 (имя хоста
+  # "redis" здесь и есть имя этого сервиса). Без профиля и без REDIS_URL бот
+  # работает как раньше, с состояниями FSM в памяти процесса.
+  redis:
+    image: redis:7-alpine
+    container_name: telegram-anonymous-feedback-bot-redis
+    restart: unless-stopped
+    profiles: ["redis"]
+    volumes:
+      - redis_data:/data
+
+volumes:
+  bot_data:
+  redis_data:
