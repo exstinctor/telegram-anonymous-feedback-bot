@@ -9,6 +9,7 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMar
 from bot.core import runtime
 from bot.core.states import CustomLinkStates
 from bot.db import repository as db
+from bot.services.dialog import enter_dialog, has_dialog
 from bot.services.filters import not_a_command
 from bot.services.permissions import is_admin
 from bot.services.telegram_ui import safe_edit_text
@@ -51,7 +52,7 @@ async def start(message: Message, command: CommandObject, state: FSMContext) -> 
                 await message.answer("❌ Вы заблокированы у этого пользователя")
                 return
 
-            await state.update_data(recipient_id=recipient_id)
+            await enter_dialog(state, recipient_id=recipient_id)
             await message.answer(
                 "🚀 Здесь можно отправить анонимное сообщение человеку, который опубликовал эту ссылку \n\n"
                 "✍️ Напишите сюда всё, что хотите ему передать, и через несколько секунд он получит ваше сообщение, "
@@ -161,7 +162,7 @@ async def reset_to_original(callback: CallbackQuery) -> None:
 
 @router.message(Command("cancel"))
 async def cancel_dialog(message: Message, state: FSMContext) -> None:
-    if await state.get_state() is None:
+    if await state.get_state() is None and not has_dialog(await state.get_data()):
         await message.answer("Нечего отменять.")
         return
     await state.clear()
@@ -181,8 +182,8 @@ async def help_command(message: Message) -> None:
         "/start — получить свою анонимную ссылку\n"
         "/promo КОД — активировать промокод на премиум\n"
         "/blocklist — список заблокированных вами отправителей\n"
-        "/unblock @username — разблокировать отправителя\n"
-        "/cancel — отменить текущее действие (например, создание ссылки)"
+        "/unblock — разблокировать отправителя (кнопки в /blocklist)\n"
+        "/cancel — отменить текущее действие (создание ссылки, написание сообщения или ответа)"
     )
     if is_admin(user_id):
         text += (
@@ -190,6 +191,7 @@ async def help_command(message: Message) -> None:
             "/admin — панель управления\n"
             "/createpromo КОД ДНИ [ЛИМИТ] — быстро создать промокод\n"
             "/banlist — глобальный бан-лист (кого забанили полностью)\n"
-            "/unban ID — снять глобальный бан по Telegram ID"
+            "/unban ID — снять глобальный бан по Telegram ID\n"
+            "/find ЗАПРОС — найти пользователя по ID, @username или имени"
         )
     await message.answer(text)

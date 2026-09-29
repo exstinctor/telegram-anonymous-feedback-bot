@@ -20,5 +20,9 @@ class BroadcastStates(StatesGroup):
     waiting_content = State()  # текст или медиа с подписью; подтверждение через inline-кнопки
 
 
+class AdminSearchStates(StatesGroup):
+    waiting_query = State()  # ID, @username или часть имени для поиска пользователя
+
+
 class AdminManagementStates(StatesGroup):
     waiting_new_admin_id = State()  # ввод Telegram ID нового под-админа

@@ -9,6 +9,15 @@ DB_PATH = os.path.join(DATA_DIR, "bot_database.db")
 conn = sqlite3.connect(DB_PATH, check_same_thread=False)
 cursor = conn.cursor()
 
+# LIKE в SQLite регистронезависим только для ASCII: "иван" не найдёт "Иван".
+# Для поиска пользователей в админке нужна своя функция приведения к нижнему
+# регистру, понимающая Юникод (см. repository.search_users).
+conn.create_function(
+    "PYLOWER", 1,
+    lambda value: value.casefold() if isinstance(value, str) else "",
+    deterministic=True,
+)
+
 # WAL вместо дефолтного rollback-journal: читатели не блокируются писателем,
 # и наоборот, а каждый commit не требует полного fsync всей БД — для бота,
 # который часто делает мелкие INSERT/UPDATE, это ощутимо быстрее и меньше

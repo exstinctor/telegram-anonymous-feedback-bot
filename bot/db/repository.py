@@ -93,6 +93,68 @@ def get_user_link_row(user_id: int):
     return cursor.fetchone()
 
 
+SEARCH_QUERY_MAX_LEN = 64
+
+
+def _search_params(query: str):
+    """Нормализует запрос: без пробелов по краям и ведущего '@', в нижнем регистре.
+
+    Возвращает None для пустого запроса. Спецсимволы LIKE (%, _, \\) экранируются,
+    чтобы админ, ищущий "a_b", не получил в выдаче "aXb".
+    """
+    q = (query or "").strip()[:SEARCH_QUERY_MAX_LEN].lstrip("@").strip().casefold()
+    if not q:
+        return None
+    escaped = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    # user_id — 64-битный INTEGER; более длинные числа не могут быть ID, а
+    # передача их в SQLite падает с OverflowError.
+    uid = int(q) if q.isdigit() and len(q) <= 18 else None
+    return {"q": q, "uid": uid, "like": f"%{escaped}%", "prefix": f"{escaped}%"}
+
+
+_SEARCH_WHERE = r'''
+    user_id = :uid
+    OR PYLOWER(username) LIKE :like ESCAPE '\'
+    OR PYLOWER(first_name) LIKE :like ESCAPE '\'
+'''
+
+
+def search_users(query: str, limit: int = 10):
+    """Поиск по Telegram ID (точное совпадение), @username и имени (вхождение).
+
+    Возвращает [(user_id, username, first_name)], сначала самые точные
+    совпадения: ID, затем username целиком, затем начало username/имени.
+    """
+    params = _search_params(query)
+    if params is None:
+        return []
+    cursor.execute(
+        f'''
+        SELECT user_id, username, first_name FROM user_links
+        WHERE {_SEARCH_WHERE}
+        ORDER BY CASE
+            WHEN user_id = :uid THEN 0
+            WHEN PYLOWER(username) = :q THEN 1
+            WHEN PYLOWER(username) LIKE :prefix ESCAPE '\\' THEN 2
+            WHEN PYLOWER(first_name) LIKE :prefix ESCAPE '\\' THEN 3
+            ELSE 4
+        END, user_id
+        LIMIT :limit
+        ''',
+        {**params, "limit": limit},
+    )
+    return cursor.fetchall()
+
+
+def count_users_matching(query: str) -> int:
+    """Сколько всего пользователей подходит под запрос (для «показаны первые N из M»)."""
+    params = _search_params(query)
+    if params is None:
+        return 0
+    cursor.execute(f"SELECT COUNT(*) FROM user_links WHERE {_SEARCH_WHERE}", params)
+    return cursor.fetchone()[0]
+
+
 # ---------------------------------------------------------------------------
 # MESSAGES — messages, replies
 # ---------------------------------------------------------------------------
@@ -209,21 +271,23 @@ def remove_block(owner_id: int, target_id: int) -> int:
     return cursor.rowcount
 
 
-def remove_block_by_username(owner_id: int, username: str) -> int:
-    cursor.execute(
-        'DELETE FROM blocked_users WHERE user_id = ? AND blocked_username = ?',
-        (owner_id, username)
-    )
-    conn.commit()
-    return cursor.rowcount
-
-
 def get_blocklist(owner_id: int):
+    """(block_id, blocked_at) — без имени/username/ID заблокированного: получатель
+    без премиума не должен узнавать, кого именно заблокировал. block_id — rowid
+    записи, безопасный «ручка» для кнопки (callback_data видна клиенту, а
+    blocked_user_id в ней раскрыл бы Telegram ID отправителя)."""
     cursor.execute(
-        'SELECT blocked_username, blocked_at FROM blocked_users WHERE user_id = ? ORDER BY blocked_at DESC',
+        'SELECT rowid, blocked_at FROM blocked_users WHERE user_id = ? ORDER BY blocked_at DESC, rowid DESC',
         (owner_id,)
     )
     return cursor.fetchall()
+
+
+def remove_block_by_id(owner_id: int, block_id: int) -> int:
+    """Снимает блокировку по block_id из get_blocklist; чужие записи не трогает."""
+    cursor.execute('DELETE FROM blocked_users WHERE rowid = ? AND user_id = ?', (block_id, owner_id))
+    conn.commit()
+    return cursor.rowcount
 
 
 def get_blockers_of(target_id: int):

@@ -13,12 +13,12 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 from bot.core.config import logger
-from bot.core.states import AdminManagementStates, AdminPremiumStates, PromoStates
+from bot.core.states import AdminManagementStates, AdminPremiumStates, AdminSearchStates, PromoStates
 from bot.db import repository as db
 from bot.db.premium import add_or_extend_premium, count_active_premium, count_all_premium_records, get_premium_page, get_user_premium_until
 from bot.services.filters import not_a_command
 from bot.services.permissions import is_admin, is_super_admin
-from bot.services.telegram_ui import safe_edit_caption, safe_edit_text
+from bot.services.telegram_ui import safe_edit_text
 from bot.services.utils import is_valid_custom_link, normalize_code
 
 router = Router(name="admin")
@@ -26,6 +26,7 @@ router = Router(name="admin")
 USERS_PAGE_SIZE = 10
 BAN_LIST_PAGE_SIZE = 10
 PREMIUM_PAGE_SIZE = 10
+SEARCH_RESULTS_LIMIT = 10
 
 
 @router.message(Command("admin"))
@@ -67,7 +68,7 @@ async def admin_show_users_list(callback: CallbackQuery, page: int = 0) -> None:
 
     users = db.get_users_page(offset=page * USERS_PAGE_SIZE, limit=USERS_PAGE_SIZE)
 
-    keyboard = []
+    keyboard = [[InlineKeyboardButton(text="🔍 Найти пользователя", callback_data="admin_search_start")]]
     for user_id, username, first_name in users:
         display = f"{first_name or ''} (@{username})" if username else f"{first_name or ''} (ID:{user_id})"
         keyboard.append([InlineKeyboardButton(text=display, callback_data=f"admin_user_{user_id}")])
@@ -190,6 +191,94 @@ async def admin_unban_command(message: Message, command: CommandObject) -> None:
         return
     db.global_unban(target_id)
     await message.answer(f"✅ Глобальный бан снят с пользователя {target_id}.")
+
+
+def _search_button_text(user_id: int, username, first_name) -> str:
+    name = first_name or "Без имени"
+    return f"{name} (@{username}) · {user_id}" if username else f"{name} · {user_id}"
+
+
+def _build_search_results(query: str):
+    """(текст, клавиатура) с результатами поиска или None, если ничего не найдено.
+
+    Нажатие на результат ведёт в ту же карточку пользователя (admin_user_<id>),
+    что и обычный список, — отдельной логики управления пользователем нет.
+    """
+    users = db.search_users(query, limit=SEARCH_RESULTS_LIMIT)
+    if not users:
+        return None
+
+    total = db.count_users_matching(query)
+    text = f"🔍 Найдено: {total}"
+    if total > len(users):
+        text += f" (показаны первые {len(users)}, уточните запрос)"
+
+    keyboard = [
+        [InlineKeyboardButton(text=_search_button_text(*user), callback_data=f"admin_user_{user[0]}")]
+        for user in users
+    ]
+    keyboard.append([InlineKeyboardButton(text="🔍 Искать ещё", callback_data="admin_search_start")])
+    keyboard.append([InlineKeyboardButton(text="« К списку", callback_data="admin_users_list_page_0")])
+    return text, InlineKeyboardMarkup(inline_keyboard=keyboard)
+
+
+SEARCH_PROMPT = (
+    "Введите Telegram ID, @username или часть имени пользователя.\n\n"
+    "/cancel — отменить."
+)
+
+
+@router.callback_query(F.data == "admin_search_start")
+async def admin_search_start(callback: CallbackQuery, state: FSMContext) -> None:
+    if not is_admin(callback.from_user.id):
+        await callback.answer("Нет доступа.", show_alert=True)
+        return
+    await callback.answer()
+    await state.set_state(AdminSearchStates.waiting_query)
+    await callback.message.reply(SEARCH_PROMPT)
+
+
+@router.message(AdminSearchStates.waiting_query, not_a_command)
+async def admin_search_finish(message: Message, state: FSMContext) -> None:
+    if not is_admin(message.from_user.id):
+        await message.answer("❌ У вас нет доступа.")
+        await state.clear()
+        return
+
+    query = (message.text or "").strip()
+    if not query:
+        await message.answer("Отправьте текст: ID, @username или часть имени. /cancel — отменить.")
+        return
+
+    result = _build_search_results(query)
+    if result is None:
+        # Состояние не сбрасываем: опечатку можно исправить, не нажимая кнопку заново.
+        await message.answer("Никого не нашёл. Попробуйте другой запрос или /cancel для отмены.")
+        return
+
+    await state.clear()
+    text, keyboard = result
+    await message.answer(text, reply_markup=keyboard)
+
+
+@router.message(Command("find"))
+async def admin_find_command(message: Message, command: CommandObject, state: FSMContext) -> None:
+    """Быстрый поиск без кнопок: /find ID | @username | часть имени."""
+    if not is_admin(message.from_user.id):
+        await message.answer("❌ У вас нет доступа.")
+        return
+    if not command.args or not command.args.strip():
+        await message.answer("Использование: /find ID, @username или часть имени")
+        return
+
+    result = _build_search_results(command.args)
+    if result is None:
+        await message.answer("Никого не нашёл.")
+        return
+
+    await state.clear()  # не оставляем висящим прежнее ожидание ввода
+    text, keyboard = result
+    await message.answer(text, reply_markup=keyboard)
 
 
 def _get_user_full_info(user_id: int, bot_username: str):
