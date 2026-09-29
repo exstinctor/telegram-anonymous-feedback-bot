@@ -18,7 +18,7 @@ from bot.db import repository as db
 from bot.db.premium import add_or_extend_premium, count_active_premium, count_all_premium_records, get_premium_page, get_user_premium_until
 from bot.services.filters import not_a_command
 from bot.services.permissions import is_admin, is_super_admin
-from bot.services.telegram_ui import safe_edit_text
+from bot.services.telegram_ui import safe_edit_caption, safe_edit_text
 from bot.services.utils import is_valid_custom_link, normalize_code
 
 router = Router(name="admin")

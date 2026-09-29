@@ -271,23 +271,21 @@ def remove_block(owner_id: int, target_id: int) -> int:
     return cursor.rowcount
 
 
-def get_blocklist(owner_id: int):
-    """(block_id, blocked_at) — без имени/username/ID заблокированного: получатель
-    без премиума не должен узнавать, кого именно заблокировал. block_id — rowid
-    записи, безопасный «ручка» для кнопки (callback_data видна клиенту, а
-    blocked_user_id в ней раскрыл бы Telegram ID отправителя)."""
+def remove_block_by_username(owner_id: int, username: str) -> int:
     cursor.execute(
-        'SELECT rowid, blocked_at FROM blocked_users WHERE user_id = ? ORDER BY blocked_at DESC, rowid DESC',
+        'DELETE FROM blocked_users WHERE user_id = ? AND blocked_username = ?',
+        (owner_id, username)
+    )
+    conn.commit()
+    return cursor.rowcount
+
+
+def get_blocklist(owner_id: int):
+    cursor.execute(
+        'SELECT blocked_username, blocked_at FROM blocked_users WHERE user_id = ? ORDER BY blocked_at DESC',
         (owner_id,)
     )
     return cursor.fetchall()
-
-
-def remove_block_by_id(owner_id: int, block_id: int) -> int:
-    """Снимает блокировку по block_id из get_blocklist; чужие записи не трогает."""
-    cursor.execute('DELETE FROM blocked_users WHERE rowid = ? AND user_id = ?', (block_id, owner_id))
-    conn.commit()
-    return cursor.rowcount
 
 
 def get_blockers_of(target_id: int):
