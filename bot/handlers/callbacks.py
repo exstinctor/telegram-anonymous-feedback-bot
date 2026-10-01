@@ -9,7 +9,7 @@ from bot.core.states import AdminPremiumStates
 from bot.db import repository as db
 from bot.db.premium import add_or_extend_premium, is_premium, remove_premium
 from bot.services.permissions import is_admin
-from bot.services.telegram_ui import safe_edit_caption, safe_edit_text
+from bot.services.telegram_ui import back_markup, safe_edit_caption, safe_edit_text
 from bot.services.utils import get_user_loginfo
 
 router = Router(name="callbacks")
@@ -120,7 +120,8 @@ async def admin_premium_add_days(callback: CallbackQuery) -> None:
     new_until = add_or_extend_premium(target_id, days)
     await safe_edit_text(
         callback.message,
-        f"Премиум выдан пользователю {target_id} до {new_until.strftime('%d.%m.%Y %H:%M')}"
+        f"Премиум выдан пользователю {target_id} до {new_until.strftime('%d.%m.%Y %H:%M')}",
+        reply_markup=back_markup(f"admin_user_{target_id}"),
     )
 
 
@@ -140,7 +141,10 @@ async def admin_premium_remove(callback: CallbackQuery) -> None:
         return
     target_id = int(callback.data.split("_")[3])
     remove_premium(target_id)
-    await safe_edit_text(callback.message, f"Премиум снят с пользователя {target_id} (если он был).")
+    await safe_edit_text(
+        callback.message, f"Премиум снят с пользователя {target_id} (если он был).",
+        reply_markup=back_markup(f"admin_user_{target_id}"),
+    )
 
 
 @router.callback_query(F.data.startswith("admin_who_blocked_"))
@@ -150,12 +154,18 @@ async def admin_who_blocked(callback: CallbackQuery) -> None:
     target_id = int(callback.data.split("_")[3])
     rows = db.get_blockers_of(target_id)
     if not rows:
-        await safe_edit_text(callback.message, "Никто не блокировал этого пользователя.")
+        await safe_edit_text(
+            callback.message, "Никто не блокировал этого пользователя.",
+            reply_markup=back_markup(f"admin_user_{target_id}"),
+        )
         return
 
     premium_blockers = [(uid, name) for uid, name in rows if is_premium(uid)]
     if not premium_blockers:
-        await safe_edit_text(callback.message, "Его блокировали только пользователи без премиума.")
+        await safe_edit_text(
+            callback.message, "Его блокировали только пользователи без премиума.",
+            reply_markup=back_markup(f"admin_user_{target_id}"),
+        )
         return
 
     msg = "Пользователь заблокирован у премиум-пользователей:\n\n"

@@ -8,6 +8,16 @@ Telegram отвечает 400 "message is not modified", если редакти
 (F05 из ревью).
 """
 from aiogram.exceptions import TelegramBadRequest
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+
+
+def back_markup(callback_data: str, text: str = "Назад") -> InlineKeyboardMarkup:
+    """Клавиатура из одной кнопки возврата.
+
+    Нужна для итоговых/пустых экранов админ-панели: без неё edit_text снимает
+    клавиатуру, и экран становится тупиком (приходится заново набирать /admin).
+    """
+    return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=text, callback_data=callback_data)]])
 
 
 async def safe_edit_text(message, text, reply_markup=None, **kwargs) -> None:

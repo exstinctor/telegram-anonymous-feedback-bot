@@ -18,6 +18,7 @@ from bot.db.premium import get_active_premium_user_ids
 from bot.services.attachments import detect_attachment, exceeds_length_limit
 from bot.services.filters import not_a_command
 from bot.services.permissions import is_admin
+from bot.services.telegram_ui import back_markup
 
 router = Router(name="broadcast")
 
@@ -143,7 +144,7 @@ async def broadcast_cancel(callback: CallbackQuery, state: FSMContext) -> None:
         return
     await callback.answer()
     await state.clear()
-    await callback.message.edit_text("Рассылка отменена.")
+    await callback.message.edit_text("Рассылка отменена.", reply_markup=back_markup("admin_menu_back", "Назад в меню"))
 
 
 async def _send_one(bot: Bot, user_id: int, msg_type: str, fields: dict, content_text: str, silent: bool) -> bool:
@@ -207,7 +208,10 @@ async def broadcast_confirm(callback: CallbackQuery, state: FSMContext, bot: Bot
 
     if not msg_type:
         await callback.answer()
-        await callback.message.edit_text("Данные рассылки потеряны (истекло состояние) — начните заново через /admin.")
+        await callback.message.edit_text(
+            "Данные рассылки потеряны (истекло состояние) — начните заново через /admin.",
+            reply_markup=back_markup("admin_menu_back", "Назад в меню"),
+        )
         return
 
     fields = data.get("fields", {})

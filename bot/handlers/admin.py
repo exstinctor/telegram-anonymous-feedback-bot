@@ -18,7 +18,7 @@ from bot.db import repository as db
 from bot.db.premium import add_or_extend_premium, count_active_premium, count_all_premium_records, get_premium_page, get_user_premium_until
 from bot.services.filters import not_a_command
 from bot.services.permissions import is_admin, is_super_admin
-from bot.services.telegram_ui import safe_edit_caption, safe_edit_text
+from bot.services.telegram_ui import back_markup, safe_edit_caption, safe_edit_text
 from bot.services.utils import is_valid_custom_link, normalize_code
 
 router = Router(name="admin")
@@ -317,7 +317,10 @@ async def admin_show_user_panel(callback: CallbackQuery, bot: Bot, target_id: in
     me = await bot.get_me()
     info = _get_user_full_info(target_id, me.username)
     if not info:
-        await safe_edit_text(callback.message, "Пользователь не найден.")
+        await safe_edit_text(
+            callback.message, "Пользователь не найден.",
+            reply_markup=back_markup("admin_users_list_page_0", "Назад к списку"),
+        )
         return
 
     text = (
@@ -388,7 +391,10 @@ async def admin_set_manual_premium_days(message: Message, state: FSMContext) -> 
     days = int(text)
     try:
         new_until = add_or_extend_premium(target_id, days)
-        await message.answer(f"Премиум выдан пользователю {target_id} до {new_until.strftime('%d.%m.%Y %H:%M')}")
+        await message.answer(
+            f"Премиум выдан пользователю {target_id} до {new_until.strftime('%d.%m.%Y %H:%M')}",
+            reply_markup=back_markup(f"admin_user_{target_id}", "К пользователю"),
+        )
     except Exception as e:
         logger.error(f"ADMIN_MANUAL_PREMIUM_ERROR: {e}")
         await message.answer("Ошибка при выдаче премиума.")
@@ -490,7 +496,8 @@ async def admin_promo_create_finish(message: Message, state: FSMContext) -> None
 
     parts = (message.text or "").strip().split()
     ok, text = _parse_and_create_promo(parts, message.from_user.id)
-    await message.answer(text)
+    # Кнопка возврата только после успеха: при ошибке бот просит ввести код ещё раз
+    await message.answer(text, reply_markup=back_markup("admin_promo_list", "К промокодам") if ok else None)
     if ok:
         await state.clear()
     # ok=False значит "переспроси" — состояние остаётся, чтобы можно было
@@ -595,7 +602,10 @@ async def admin_manage_add_finish(message: Message, state: FSMContext) -> None:
         return
 
     db.add_admin(new_admin_id, added_by=message.from_user.id)
-    await message.answer(f"✅ Пользователь {new_admin_id} назначен админом.")
+    await message.answer(
+        f"✅ Пользователь {new_admin_id} назначен админом.",
+        reply_markup=back_markup("admin_manage_list", "К админам"),
+    )
 
 
 @router.callback_query(F.data.startswith("admin_manage_remove_"))
