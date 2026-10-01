@@ -139,7 +139,7 @@ def _build_global_ban_list_view(page: int = 0):
     для callback-кнопки (edit) и команды /banlist (answer), чтобы не
     дублировать пагинацию и форматирование в двух местах."""
     total = db.count_global_ban_list()
-    keyboard = [[InlineKeyboardButton(text="Назад", callback_data="admin_users_list_page_0")]]
+    keyboard = [[InlineKeyboardButton(text="Назад", callback_data="admin_menu_back")]]
     if total == 0:
         return "Глобальный бан-лист пуст.", InlineKeyboardMarkup(inline_keyboard=keyboard)
 
