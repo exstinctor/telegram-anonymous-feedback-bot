@@ -59,8 +59,12 @@ def _pagination_row(base_callback: str, page: int, total: int, page_size: int):
 
 async def admin_show_users_list(callback: CallbackQuery, page: int = 0) -> None:
     total = db.count_users()
+    back_row = [InlineKeyboardButton(text="Назад в меню", callback_data="admin_menu_back")]
     if total == 0:
-        await safe_edit_text(callback.message, "В боте пока нет пользователей.")
+        await safe_edit_text(
+            callback.message, "В боте пока нет пользователей.",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[back_row]),
+        )
         return
 
     max_page = (total - 1) // USERS_PAGE_SIZE
@@ -76,6 +80,7 @@ async def admin_show_users_list(callback: CallbackQuery, page: int = 0) -> None:
     nav_row = _pagination_row("admin_users_list_page", page, total, USERS_PAGE_SIZE)
     if nav_row:
         keyboard.append(nav_row)
+    keyboard.append(back_row)
 
     total_pages = max(1, -(-total // USERS_PAGE_SIZE))
     header = f"Выберите пользователя (стр. {page + 1}/{total_pages}, всего {total}):"

@@ -132,7 +132,41 @@ async def test_users_list_has_search_button(uid):
 
     cb.message.edit_text = edit_text
     await admin_show_users_list(cb, page=0)
-    assert "admin_search_start" in _button_callbacks(captured["markup"])
+    callbacks = _button_callbacks(captured["markup"])
+    assert "admin_search_start" in callbacks
+    assert callbacks[-1] == "admin_menu_back"  # «Назад в меню» — последняя кнопка экрана
+
+
+async def test_users_list_back_button_below_pagination(uid):
+    """При нескольких страницах «Назад в меню» стоит под «Далее »/« Назад» и не
+    путается с переходом на предыдущую страницу."""
+    for i in range(12):
+        _add_user(uid(), f"paged{i}", "Paged")
+    cb = FakeCallback(FakeUser(ADMIN_ID))
+    captured = {}
+
+    async def edit_text(text, reply_markup=None):
+        captured["markup"] = reply_markup
+
+    cb.message.edit_text = edit_text
+    await admin_show_users_list(cb, page=0)
+    callbacks = _button_callbacks(captured["markup"])
+    assert "admin_users_list_page_1" in callbacks      # есть «Далее »
+    assert callbacks[-1] == "admin_menu_back"
+
+
+async def test_users_list_empty_still_has_back_button(monkeypatch):
+    monkeypatch.setattr(db, "count_users", lambda: 0)
+    cb = FakeCallback(FakeUser(ADMIN_ID))
+    captured = {}
+
+    async def edit_text(text, reply_markup=None):
+        captured["text"], captured["markup"] = text, reply_markup
+
+    cb.message.edit_text = edit_text
+    await admin_show_users_list(cb, page=0)
+    assert "пока нет пользователей" in captured["text"]
+    assert _button_callbacks(captured["markup"]) == ["admin_menu_back"]
 
 
 async def test_search_start_sets_state_for_admin(uid):
